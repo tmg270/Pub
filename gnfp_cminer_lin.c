@@ -728,10 +728,15 @@ static int selftest(void) {
         fprintf(stderr, "selftest FAIL hash %s != %s\n", hex, expect);
         return 1;
     }
-    if (!meets_target(dig, 14) || meets_target(dig, 16)) {
+
+    /* correct synthetic target test */
+    unsigned char z14[32] = {0};
+    z14[1] = 3;
+    if (!meets_target(z14, 14) || meets_target(z14, 16)) {
         fprintf(stderr, "selftest FAIL target\n");
         return 1;
     }
+
     printf("selftest OK\n");
     return 0;
 }
