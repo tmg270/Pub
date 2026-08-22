@@ -1,12 +1,8 @@
-﻿/*
+/*
  * gnfp_cminer.c — GNFPHash 1.0.5 CPU miner (Ubuntu / Linux)
+ * Dual-connection 5% fee + local counters + fast hash + fixed selftest
  *
- * Dual-connection 5% fee (exact method used by wallet gnfp-cminer 1.1.0)
- * + per-thread local counters (flush every 16384)
- * + fast hash (no snprintf in rounds)
- *
- * Build:
- *   gcc -O3 -march=native -pthread -o gnfp_cminer cminer.c -lssl -lcrypto
+ * Build: gcc -O3 -march=native -pthread -o gnfp_cminer cminer.c -lssl -lcrypto
  */
 
 #define _GNU_SOURCE
@@ -71,7 +67,7 @@ typedef struct {
     int  port;
     int  tls;
     int  threads;
-    char address[160];
+    char address[256];
     char worker[64];
     char user[320];
     char fee_user[320];
@@ -520,9 +516,8 @@ static void *hash_worker(void *arg) {
     }
     return NULL;
 }
-
 static int classify_reply(const char *line) {
-    if (strstr(line, "\"result\":true") || strstr(line, "\"status\":\"OK\"")) return 1; /* accept */
+    if (strstr(line, "\"result\":true") || strstr(line, "\"status\":\"OK\"")) return 1;
     if (strstr(line, "implausible_rate")) return 3;
     if (strstr(line, "block") || strstr(line, "\"isBlock\":true")) return 4;
     if (strstr(line, "\"result\":false") || strstr(line, "reject")) return 2;
@@ -683,9 +678,8 @@ static void inventory(cfg_t *cfg) {
     FILE *f = fopen("/proc/cpuinfo", "r");
     if (f) {
         char line[256];
-        int phys = 0, cores = 0;
+        int cores = 0;
         while (fgets(line, sizeof(line), f)) {
-            if (strncmp(line, "physical id", 11) == 0) phys++;
             if (strncmp(line, "cpu cores", 9) == 0) {
                 int c = 0;
                 if (sscanf(line, "cpu cores : %d", &c) == 1 && c > cores) cores = c;
@@ -723,7 +717,7 @@ static int parse_user(cfg_t *cfg, const char *u) {
 }
 
 static int selftest(void) {
-    const char *pre = "testpre";
+    const char *pre = "test-prework";
     const char *nonce = "0000000000000001";
     unsigned char dig[32];
     char hex[65];
@@ -838,7 +832,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < cfg.threads; i++)
         pthread_create(&th[i], NULL, hash_worker, (void *)(intptr_t)i);
 
-    int main_ok = 0, fee_ok = 0;
+    int fee_ok = 0;
     uint64_t last_stats = 0, last_status = 0;
 
     while (g_run) {
@@ -846,7 +840,6 @@ int main(int argc, char **argv) {
             printf("connecting main...\n");
             if (conn_connect(&g_mainc, &cfg) == 0) {
                 send_login_conn(&g_mainc, &cfg, cfg.user, cfg.threads);
-                main_ok = 1;
             } else {
                 sleep(3);
                 continue;
